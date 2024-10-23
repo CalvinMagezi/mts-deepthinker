@@ -33,6 +33,51 @@ import { Id } from "./convex/_generated/dataModel";
 const CANVAS_WIDTH = 4000;
 const CANVAS_HEIGHT = 4000;
 
+const VERTICAL_SPACING = 250;
+const HORIZONTAL_SPACING = 300;
+
+const repositionThoughts = (
+  thoughtId: Id<"thoughts">,
+  thoughts: Thought[],
+  x: number,
+  y: number,
+  visited: Set<Id<"thoughts">> = new Set()
+): { updatedThoughts: Thought[]; width: number } => {
+  if (visited.has(thoughtId)) {
+    return { updatedThoughts: [], width: 0 };
+  }
+  visited.add(thoughtId);
+
+  const thought = thoughts.find((t) => t._id === thoughtId);
+  if (!thought) {
+    return { updatedThoughts: [], width: 0 };
+  }
+
+  let totalWidth = 0;
+  let updatedThoughts: Thought[] = [];
+
+  for (const childId of thought.connections) {
+    const { updatedThoughts: childThoughts, width: childWidth } =
+      repositionThoughts(
+        childId,
+        thoughts,
+        x + totalWidth,
+        y + VERTICAL_SPACING,
+        visited
+      );
+    updatedThoughts = [...updatedThoughts, ...childThoughts];
+    totalWidth += childWidth + HORIZONTAL_SPACING;
+  }
+
+  const thoughtWidth = Math.max(totalWidth - HORIZONTAL_SPACING, 200);
+  const thoughtX = x + thoughtWidth / 2 - 100;
+
+  const updatedThought = { ...thought, x: thoughtX, y };
+  updatedThoughts.push(updatedThought);
+
+  return { updatedThoughts, width: thoughtWidth };
+};
+
 const App: React.FC = () => {
   const { canvasId } = useParams<{ canvasId: string }>();
   const navigate = useNavigate();
@@ -150,10 +195,7 @@ const App: React.FC = () => {
   );
 
   const handleGenerateThought = useCallback(
-    async (
-      parentId: Id<"thoughts">,
-      direction: "top" | "right" | "bottom" | "left"
-    ) => {
+    async (parentId: Id<"thoughts">) => {
       if (!canGenerateThought()) {
         toast.error("You've reached your token limit for this month.");
         return;
@@ -177,53 +219,48 @@ const App: React.FC = () => {
           thoughts
         );
 
-        const offset = 250;
-        let x = parentThought.x;
-        let y = parentThought.y;
-
-        switch (direction) {
-          case "top":
-            y -= offset;
-            break;
-          case "right":
-            x += offset;
-            break;
-          case "bottom":
-            y += offset;
-            break;
-          case "left":
-            x -= offset;
-            break;
-        }
-
         const newThought = await createThought({
           clerkId: user.id,
           canvasId: canvasId as Id<"canvases">,
           content: generatedContent,
-          x,
-          y,
-          connections: [parentId],
+          x: parentThought.x,
+          y: parentThought.y + VERTICAL_SPACING,
+          connections: [],
         });
+
+        const updatedParentThought = {
+          ...parentThought,
+          connections: [...parentThought.connections, newThought._id],
+        };
 
         await updateThought({
           thoughtId: parentId,
-          connections: [...parentThought.connections, newThought._id],
+          connections: updatedParentThought.connections,
         });
 
-        setThoughts((prevThoughts) =>
-          prevThoughts
-            .map((t) =>
-              t._id === parentId
-                ? { ...t, connections: [...t.connections, newThought._id] }
-                : t
-            )
-            .concat({
-              ...newThought,
-              connections: [parentId],
-            })
+        const updatedThoughts = [
+          ...thoughts.filter((t) => t._id !== parentId),
+          updatedParentThought,
+          newThought,
+        ];
+
+        const { updatedThoughts: repositionedThoughts } = repositionThoughts(
+          thoughts[0]._id, // Assuming the first thought is the root
+          updatedThoughts,
+          CANVAS_WIDTH / 2,
+          50
         );
 
-        zoomToThought(newThought.x, newThought.y);
+        setThoughts(repositionedThoughts);
+
+        // Update all thoughts positions in the database
+        for (const thought of repositionedThoughts) {
+          await updateThought({
+            thoughtId: thought._id,
+            x: thought.x,
+            y: thought.y,
+          });
+        }
       } catch (error) {
         console.error("Error generating thought:", error);
         toast.error("Failed to generate thought. Please try again.");
@@ -231,16 +268,7 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     },
-    [
-      canvasId,
-      user,
-      thoughts,
-      createThought,
-      updateThought,
-      zoomToThought,
-      canGenerateThought,
-      consumeTokens,
-    ]
+    [thoughts, canvasId, user, createThought, updateThought]
   );
 
   const handleDrag = useCallback(

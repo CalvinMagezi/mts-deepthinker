@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useUser } from "@clerk/clerk-react";
 import {
@@ -31,7 +31,7 @@ const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
   const userData = useQuery(api.users.getUserByClerkId, {
     clerkId: user?.id ?? "",
   });
-  const updateUserProfile = useMutation(api.users.updateUserProfile);
+  //   const updateUserProfile = useMutation(api.users.updateUserProfile);
 
   const [name, setName] = useState(userData?.name ?? "");
   const [role, setRole] = useState(userData?.role ?? "");
@@ -48,14 +48,14 @@ const UserProfileDrawer: React.FC<UserProfileDrawerProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (user?.id) {
-      await updateUserProfile({
-        clerkId: user.id,
-        name,
-        role,
-        interests: interests.split(",").map((i) => i.trim()),
-        thinkingStyle,
-        aiInteraction,
-      });
+      //   await updateUserProfile({
+      //     clerkId: user.id,
+      //     name,
+      //     role,
+      //     interests: interests.split(",").map((i) => i.trim()),
+      //     thinkingStyle,
+      //     aiInteraction,
+      //   });
       onClose();
     }
   };
