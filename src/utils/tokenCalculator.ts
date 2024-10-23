@@ -4,9 +4,12 @@ export function calculateTokens(text: string): number {
 }
 
 // Calculate cost based on input and output tokens
-export function calculateCost(inputTokens: number, outputTokens: number): number {
+export function calculateCost(
+  inputTokens: number,
+  outputTokens: number
+): number {
   const inputCost = (0.15 / 1000000) * inputTokens;
-  const outputCost = (0.60 / 1000000) * outputTokens;
+  const outputCost = (0.6 / 1000000) * outputTokens;
   return inputCost + outputCost;
 }
 
@@ -17,4 +20,11 @@ export function apiToCustomTokens(apiTokens: number): number {
 
 export function customToApiTokens(customTokens: number): number {
   return customTokens * 100;
+}
+
+export const TOKENS_PER_GENERATION = 50;
+export const FREE_TOKENS_PER_MONTH = 1000;
+
+export function getRemainingTokens(usedTokens: number): number {
+  return Math.max(0, FREE_TOKENS_PER_MONTH - usedTokens);
 }

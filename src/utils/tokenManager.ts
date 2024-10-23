@@ -1,7 +1,10 @@
-import { calculateCost, apiToCustomTokens, customToApiTokens } from './tokenCalculator';
+import { calculateCost, apiToCustomTokens } from "./tokenCalculator";
+import { TOKENS_PER_GENERATION, getRemainingTokens } from "./tokenCalculator";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 const FREE_CREDIT_AMOUNT = 1; // $1 in free credits
-const STORAGE_KEY = 'deepThinkerTokens';
+const STORAGE_KEY = "deepThinkerTokens";
 
 interface TokenData {
   apiTokensUsed: number;
@@ -27,12 +30,12 @@ export async function initializeTokenManager(): Promise<TokenData> {
 
 async function fetchIPAddress(): Promise<string> {
   try {
-    const response = await fetch('https://api.ipify.org?format=json');
+    const response = await fetch("https://api.ipify.org?format=json");
     const data = await response.json();
     return data.ip;
   } catch (error) {
-    console.error('Error fetching IP address:', error);
-    return 'unknown';
+    console.error("Error fetching IP address:", error);
+    return "unknown";
   }
 }
 
@@ -43,7 +46,9 @@ export function getRemainingCredit(): number {
 
 export function getTokenData(): TokenData {
   const storedData = localStorage.getItem(STORAGE_KEY);
-  return storedData ? JSON.parse(storedData) : { apiTokensUsed: 0, totalCost: 0, ipAddress: 'unknown' };
+  return storedData
+    ? JSON.parse(storedData)
+    : { apiTokensUsed: 0, totalCost: 0, ipAddress: "unknown" };
 }
 
 export function updateTokenUsage(newTokens: number, cost: number): void {
@@ -63,4 +68,35 @@ export function getAvailableCustomTokens(): number {
   const remainingCredit = getRemainingCredit();
   const remainingApiTokens = Math.floor(remainingCredit / calculateCost(1, 0));
   return apiToCustomTokens(remainingApiTokens);
+}
+
+export function useTokenManager(clerkId: string) {
+  const updateTokenUsage = useMutation(api.users.updateTokenUsage);
+  const tokenUsage = useQuery(api.users.getTokenUsage, { clerkId });
+
+  const canGenerateThought = () => {
+    if (tokenUsage === undefined || tokenUsage === null) return false;
+    return getRemainingTokens(tokenUsage) >= TOKENS_PER_GENERATION;
+  };
+
+  const consumeTokens = async () => {
+    if (canGenerateThought()) {
+      await updateTokenUsage({ clerkId, tokensUsed: TOKENS_PER_GENERATION });
+      return true;
+    }
+    return false;
+  };
+
+  const getAvailableTokens = () => {
+    if (tokenUsage === undefined || tokenUsage === null) return 0;
+    return getRemainingTokens(tokenUsage);
+  };
+
+  return {
+    canGenerateThought,
+    consumeTokens,
+    getAvailableTokens,
+    isLoaded: tokenUsage !== undefined,
+    userExists: tokenUsage !== null,
+  };
 }

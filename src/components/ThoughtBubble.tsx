@@ -1,19 +1,40 @@
-import React, { useState, useRef } from 'react';
-import { Thought } from '../types';
-import { Plus, Loader2, Pencil, Zap } from 'lucide-react';
-import Draggable, { DraggableEvent, DraggableData } from 'react-draggable';
+import React, { useRef } from "react";
+import { Thought } from "../types";
+import { Plus, Loader2, Pencil, Zap, MoreHorizontal } from "lucide-react";
+import Draggable, { DraggableEvent, DraggableData } from "react-draggable";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ThoughtBubbleProps {
   thought: Thought;
-  onGenerateThought: (parentId: number, direction: 'top' | 'right' | 'bottom' | 'left') => void;
+  onGenerateThought: (
+    parentId: number,
+    direction: "top" | "right" | "bottom" | "left"
+  ) => void;
   onDrag: (id: number, x: number, y: number) => void;
   onRewrite: (id: number) => void;
   isLoading: boolean;
 }
 
-const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({ thought, onGenerateThought, onDrag, onRewrite, isLoading }) => {
-  const [showActions, setShowActions] = useState(false);
-  const [actionDirection, setActionDirection] = useState<'top' | 'right' | 'bottom' | 'left' | null>(null);
+const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
+  thought,
+  onGenerateThought,
+  onDrag,
+  onRewrite,
+  isLoading,
+}) => {
   const nodeRef = useRef(null);
 
   const handleDragStart = (e: DraggableEvent) => {
@@ -25,16 +46,13 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({ thought, onGenerateThough
     onDrag(thought.id, data.x, data.y);
   };
 
-  const handleActionClick = (direction: 'top' | 'right' | 'bottom' | 'left') => {
-    setShowActions(true);
-    setActionDirection(direction);
-  };
-
-  const handleActionSelect = (action: 'ai' | 'manual' | 'rewrite') => {
-    setShowActions(false);
-    if (action === 'ai' && actionDirection) {
-      onGenerateThought(thought.id, actionDirection);
-    } else if (action === 'rewrite') {
+  const handleActionSelect = (
+    action: "ai" | "manual" | "rewrite",
+    direction?: "top" | "right" | "bottom" | "left"
+  ) => {
+    if (action === "ai" && direction) {
+      onGenerateThought(thought.id, direction);
+    } else if (action === "rewrite") {
       onRewrite(thought.id);
     }
     // For 'manual', we'll need to implement a way to add a new thought manually
@@ -49,73 +67,76 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({ thought, onGenerateThough
       onStop={handleDrag}
       bounds="parent"
     >
-      <div
+      <Card
         ref={nodeRef}
         id={`thought-${thought.id}`}
-        className="absolute bg-gradient-to-br from-brand_black to-primary_black rounded-xl p-4 shadow-lg border-2 border-brand_blue transition-all hover:shadow-xl hover:scale-105 cursor-move"
-        style={{ width: '200px', minHeight: '100px' }}
-        onMouseDown={(e) => e.stopPropagation()}
+        className="absolute w-64 sm:w-72 md:w-80 cursor-move bg-gradient-to-br from-brand_black to-primary_black border-brand_blue shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out transform hover:scale-102"
       >
-        {['top', 'right', 'bottom', 'left'].map((direction) => (
-          <button
-            key={direction}
-            className={`absolute bg-brand_green rounded-full p-1 hover:bg-brand_blue transition-colors ${
-              direction === 'top' ? '-top-3 left-1/2 -translate-x-1/2' :
-              direction === 'right' ? '-right-3 top-1/2 -translate-y-1/2' :
-              direction === 'bottom' ? '-bottom-3 left-1/2 -translate-x-1/2' :
-              '-left-3 top-1/2 -translate-y-1/2'
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleActionClick(direction as any);
-            }}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 size={16} className="animate-spin text-primary_black" />
-            ) : (
-              <Plus size={16} className="text-primary_black" />
-            )}
-          </button>
-        ))}
-        <p className="text-sm font-medium text-brand_gray">{thought.content}</p>
-        {showActions && (
-          <div className={`absolute ${
-            actionDirection === 'top' ? 'top-full left-1/2 -translate-x-1/2 mt-2' :
-            actionDirection === 'right' ? 'left-full top-1/2 -translate-y-1/2 ml-2' :
-            actionDirection === 'bottom' ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' :
-            'right-full top-1/2 -translate-y-1/2 mr-2'
-          } bg-primary_black border border-brand_blue rounded-md shadow-lg p-2 z-10`}>
-            <button
-              className="flex items-center justify-center w-full p-2 mb-2 bg-brand_green text-primary_black rounded hover:bg-brand_blue transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleActionSelect('ai');
-              }}
-            >
-              <Zap size={16} className="mr-2" /> Continue with Praxis
-            </button>
-            <button
-              className="flex items-center justify-center w-full p-2 mb-2 bg-brand_gray text-primary_black rounded hover:bg-gray_text transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleActionSelect('manual');
-              }}
-            >
-              <Pencil size={16} className="mr-2" /> Write manually
-            </button>
-            <button
-              className="flex items-center justify-center w-full p-2 bg-brand_blue text-primary_black rounded hover:opacity-80 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleActionSelect('rewrite');
-              }}
-            >
-              <Zap size={16} className="mr-2" /> Rewrite with Praxis
-            </button>
+        <CardContent className="p-4">
+          <div className="flex justify-between items-start mb-2">
+            <p className="text-sm font-medium text-brand_gray flex-grow mr-2">
+              {thought.content}
+            </p>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4 text-brand_gray" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48 bg-primary_black border-brand_blue"
+              >
+                <DropdownMenuItem
+                  onClick={() => handleActionSelect("rewrite")}
+                  className="text-brand_gray hover:text-primary_black hover:bg-brand_blue"
+                >
+                  <Zap className="mr-2 h-4 w-4" /> Rewrite with AI
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleActionSelect("manual")}
+                  className="text-brand_gray hover:text-primary_black hover:bg-brand_blue"
+                >
+                  <Pencil className="mr-2 h-4 w-4" /> Write manually
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        )}
-      </div>
+          <div className="flex justify-around mt-4">
+            {["top", "right", "bottom", "left"].map((direction) => (
+              <TooltipProvider key={direction}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 rounded-full bg-brand_green hover:bg-brand_blue transition-colors"
+                      onClick={() =>
+                        handleActionSelect(
+                          "ai",
+                          direction as "top" | "right" | "bottom" | "left"
+                        )
+                      }
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary_black" />
+                      ) : (
+                        <Plus className="h-4 w-4 text-primary_black" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side={direction as "top" | "right" | "bottom" | "left"}
+                  >
+                    <p>Generate thought ({direction})</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </Draggable>
   );
 };
