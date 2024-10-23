@@ -1,18 +1,29 @@
 import React from "react";
 import { Thought } from "../types";
+import ThoughtBubble from "./ThoughtBubble";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface CanvasProps {
-  children: React.ReactNode;
   thoughts: Thought[];
   width: number;
   height: number;
+  onGenerateThought: (
+    parentId: Id<"thoughts">,
+    direction: "top" | "right" | "bottom" | "left"
+  ) => void;
+  onDrag: (id: Id<"thoughts">, x: number, y: number) => void;
+  onRewrite: (id: Id<"thoughts">) => void;
+  isLoading: boolean;
 }
 
 const Canvas: React.FC<CanvasProps> = ({
-  children,
   thoughts,
   width,
   height,
+  onGenerateThought,
+  onDrag,
+  onRewrite,
+  isLoading,
 }) => {
   return (
     <div
@@ -22,11 +33,11 @@ const Canvas: React.FC<CanvasProps> = ({
     >
       {thoughts.map((thought) =>
         thought.connections.map((connectionId) => {
-          const connectedThought = thoughts.find((t) => t.id === connectionId);
+          const connectedThought = thoughts.find((t) => t._id === connectionId);
           if (connectedThought) {
             return (
               <svg
-                key={`${thought.id}-${connectionId}`}
+                key={`${thought._id}-${connectionId}`}
                 className="absolute top-0 left-0 w-full h-full pointer-events-none"
                 style={{ zIndex: 0 }}
               >
@@ -44,7 +55,16 @@ const Canvas: React.FC<CanvasProps> = ({
           return null;
         })
       )}
-      {children}
+      {thoughts.map((thought) => (
+        <ThoughtBubble
+          key={thought._id}
+          thought={thought}
+          onGenerateThought={onGenerateThought}
+          onDrag={onDrag}
+          onRewrite={onRewrite}
+          isLoading={isLoading}
+        />
+      ))}
     </div>
   );
 };

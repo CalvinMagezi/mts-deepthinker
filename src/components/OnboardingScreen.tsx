@@ -21,6 +21,10 @@ import {
   CheckCircle,
   ArrowLeft,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom"; // or your routing library
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
+import { useUser } from "@clerk/clerk-react";
 
 interface UserData {
   name: string;
@@ -32,13 +36,19 @@ interface UserData {
 
 interface OnboardingScreenProps {
   initialData: Partial<UserData>;
-  onStepComplete: (step: string, value: any) => void;
+  onStepComplete: (step: string, value: unknown) => void;
 }
 
 export default function OnboardingScreen({
   initialData,
   onStepComplete,
 }: OnboardingScreenProps) {
+  const navigate = useNavigate();
+  const { user } = useUser();
+  const updateOnboardingStep = useMutation(api.users.updateOnboardingStep);
+  const getInitialCanvasId = useQuery(api.users.getInitialCanvasId, {
+    clerkId: user?.id as string,
+  });
   const [step, setStep] = useState(0);
   const [userData, setUserData] = useState<UserData>({
     name: initialData.name || "",
@@ -72,6 +82,28 @@ export default function OnboardingScreen({
   const handleBack = () => {
     setStep(step - 1);
   };
+
+  const handleComplete = async () => {
+    const { canvasId } = await updateOnboardingStep({
+      clerkId: user?.id as string,
+      step: "aiInteraction",
+      value: userData.aiInteraction,
+    });
+
+    if (canvasId) {
+      navigate(`/canvas/${canvasId}`);
+    } else {
+      console.error("No canvas ID returned after onboarding");
+      // Handle this error case appropriately
+    }
+  };
+
+  // Use this effect to redirect if the user already has an initial canvas
+  useEffect(() => {
+    if (getInitialCanvasId) {
+      navigate(`/canvas/${getInitialCanvasId}`);
+    }
+  }, [getInitialCanvasId, navigate]);
 
   const steps = [
     // Welcome
@@ -333,7 +365,7 @@ export default function OnboardingScreen({
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <Button
-          onClick={handleNext}
+          onClick={handleComplete}
           className="bg-brand_blue text-primary_black hover:bg-brand_green"
           disabled={!userData.aiInteraction}
         >

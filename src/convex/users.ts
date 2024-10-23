@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { createCanvas } from "./canvases";
 
 export const createOrUpdateUser = mutation({
   args: {
@@ -11,6 +12,7 @@ export const createOrUpdateUser = mutation({
     aiInteraction: v.optional(v.string()),
     ip: v.string(),
     clerkId: v.string(),
+    initialCanvasId: v.optional(v.id("canvases")),
   },
   handler: async (ctx, args) => {
     const existingUser = await ctx.db
@@ -30,6 +32,7 @@ export const createOrUpdateUser = mutation({
       lastTokenResetDate: Date.now(),
       lastLoginIp: args.ip,
       clerkId: args.clerkId,
+      initialCanvasId: args.initialCanvasId,
     };
 
     if (existingUser) {
@@ -72,12 +75,26 @@ export const updateOnboardingStep = mutation({
       throw new Error("User not found");
     }
 
-    const update = { [step]: value };
+    const update: Record<string, unknown> = { [step]: value };
+    let canvasId: string | null = null;
+
     if (step === "aiInteraction") {
       update.onboardingCompleted = true;
+
+      // Create a new canvas for the user
+      canvasId = await createCanvas(ctx, {
+        userId: user._id,
+        name: "My First Canvas",
+      });
+
+      // Store the initial canvas ID in the user document
+      update.initialCanvasId = canvasId;
     }
 
-    return await ctx.db.patch(user._id, update);
+    await ctx.db.patch(user._id, update);
+
+    // Return the canvasId if it was created
+    return { canvasId };
   },
 });
 
@@ -140,5 +157,22 @@ export const updateTokenUsage = mutation({
       tokenUsage: newTokenUsage,
       lastTokenResetDate: currentDate.getTime(),
     });
+  },
+});
+
+// Add this new query function
+export const getInitialCanvasId = query({
+  args: { clerkId: v.string() },
+  handler: async (ctx, { clerkId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerkId", (q) => q.eq("clerkId", clerkId))
+      .first();
+
+    if (!user) {
+      return null;
+    }
+
+    return user.initialCanvasId;
   },
 });

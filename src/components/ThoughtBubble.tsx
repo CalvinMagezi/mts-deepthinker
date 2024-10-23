@@ -16,15 +16,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Id } from "@/convex/_generated/dataModel";
 
 interface ThoughtBubbleProps {
   thought: Thought;
   onGenerateThought: (
-    parentId: number,
+    parentId: Id<"thoughts">,
     direction: "top" | "right" | "bottom" | "left"
   ) => void;
-  onDrag: (id: number, x: number, y: number) => void;
-  onRewrite: (id: number) => void;
+  onDrag: (id: Id<"thoughts">, x: number, y: number) => void;
+  onRewrite: (id: Id<"thoughts">) => void;
   isLoading: boolean;
 }
 
@@ -43,7 +44,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
 
   const handleDrag = (e: DraggableEvent, data: DraggableData) => {
     e.stopPropagation();
-    onDrag(thought.id, data.x, data.y);
+    onDrag(thought._id, data.x, data.y);
   };
 
   const handleActionSelect = (
@@ -51,9 +52,9 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     direction?: "top" | "right" | "bottom" | "left"
   ) => {
     if (action === "ai" && direction) {
-      onGenerateThought(thought.id, direction);
+      onGenerateThought(thought._id, direction);
     } else if (action === "rewrite") {
-      onRewrite(thought.id);
+      onRewrite(thought._id);
     }
     // For 'manual', we'll need to implement a way to add a new thought manually
   };
@@ -69,7 +70,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     >
       <Card
         ref={nodeRef}
-        id={`thought-${thought.id}`}
+        id={`thought-${thought._id}`}
         className="absolute w-64 sm:w-72 md:w-80 cursor-move bg-gradient-to-br from-brand_black to-primary_black border-brand_blue shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out transform hover:scale-102"
       >
         <CardContent className="p-4">

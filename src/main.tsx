@@ -11,6 +11,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import App from "./App";
 import SignInPage from "./components/auth/SignInPage";
 import SignUpPage from "./components/auth/SignUpPage";
+import CanvasRouter from "./components/CanvasRouter";
 
 const router = createBrowserRouter([
   {
@@ -22,7 +23,10 @@ const router = createBrowserRouter([
       {
         element: <DashboardLayout />,
         path: "dashboard",
-        children: [{ path: "/dashboard", element: <App /> }],
+        children: [
+          { path: "", element: <CanvasRouter /> },
+          { path: ":canvasId", element: <CanvasRouter /> },
+        ],
       },
     ],
   },

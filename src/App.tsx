@@ -15,7 +15,6 @@ import {
 } from "react-zoom-pan-pinch";
 import { Settings, MessageSquare } from "lucide-react";
 import Canvas from "./components/Canvas";
-import ThoughtBubble from "./components/ThoughtBubble";
 import AddThoughtForm from "./components/AddThoughtForm";
 import TokenDisplay from "./components/TokenDisplay";
 import ChatWindow from "./components/ChatWindow";
@@ -28,11 +27,15 @@ import OnboardingScreen from "./components/OnboardingScreen";
 import SignInPage from "./components/auth/SignInPage";
 import { Toaster, toast } from "react-hot-toast";
 import LoadingSpinner from "./components/LoadingSpinner";
+import { useNavigate, useParams } from "react-router-dom";
+import { Id } from "./convex/_generated/dataModel";
 
 const CANVAS_WIDTH = 4000;
 const CANVAS_HEIGHT = 4000;
 
 const App: React.FC = () => {
+  const { canvasId } = useParams<{ canvasId: string }>();
+  const navigate = useNavigate();
   const [thoughts, setThoughts] = useState<Thought[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -48,6 +51,16 @@ const App: React.FC = () => {
     api.users.getUserByClerkId,
     user?.id ? { clerkId: user.id } : "skip"
   );
+  const canvas = useQuery(
+    api.canvases.getCanvas,
+    canvasId ? { canvasId: canvasId as Id<"canvases"> } : "skip"
+  );
+  const thoughtsData = useQuery(
+    api.thoughts.getThoughtsForCanvas,
+    canvasId ? { canvasId: canvasId as Id<"canvases"> } : "skip"
+  );
+  const createThought = useMutation(api.thoughts.createThought);
+  const updateThought = useMutation(api.thoughts.updateThought);
   const createOrUpdateUser = useMutation(api.users.createOrUpdateUser);
   const updateOnboardingStep = useMutation(api.users.updateOnboardingStep);
   const {
@@ -57,6 +70,7 @@ const App: React.FC = () => {
     isLoaded: tokenManagerLoaded,
     userExists,
   } = useTokenManager(user?.id ?? "");
+  const createCanvas = useMutation(api.canvases.createCanvas);
 
   useEffect(() => {
     if (user && convexUser === null && userExists === false) {
@@ -76,6 +90,30 @@ const App: React.FC = () => {
     }
   }, [user, convexUser, createOrUpdateUser, userExists]);
 
+  useEffect(() => {
+    if (convexUser && !canvasId) {
+      if (convexUser.initialCanvasId) {
+        navigate(`/dashboard/${convexUser.initialCanvasId}`);
+      } else if (convexUser.onboardingCompleted) {
+        // If onboarding is completed but no initial canvas, create one
+        createCanvas({ userId: user!.id, name: "My First Canvas" })
+          .then((newCanvasId: Id<"canvases">) => {
+            navigate(`/dashboard/${newCanvasId}`);
+          })
+          .catch((error: Error) => {
+            console.error("Error creating initial canvas:", error);
+            toast.error("Failed to create initial canvas. Please try again.");
+          });
+      }
+    }
+  }, [convexUser, canvasId, navigate, user, createCanvas]);
+
+  useEffect(() => {
+    if (thoughtsData) {
+      setThoughts(thoughtsData as Thought[]);
+    }
+  }, [thoughtsData]);
+
   const zoomToThought = useCallback((x: number, y: number) => {
     if (transformComponentRef.current) {
       const { setTransform } = transformComponentRef.current;
@@ -91,26 +129,29 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddThought = useCallback(
-    (content: string) => {
-      const newThought: Thought = {
-        id: Date.now(),
+    async (content: string) => {
+      if (!canvasId || !user) return;
+
+      const newThought = (await createThought({
+        clerkId: user.id,
+        canvasId: canvasId as Id<"canvases">,
         content,
         x: CANVAS_WIDTH / 2,
         y: CANVAS_HEIGHT / 2,
-        connections: [],
-      };
+      })) as Thought;
+
       setThoughts((prevThoughts) => [...prevThoughts, newThought]);
 
       setTimeout(() => {
         zoomToThought(newThought.x, newThought.y);
       }, 50);
     },
-    [zoomToThought]
+    [canvasId, user, createThought, zoomToThought]
   );
 
   const handleGenerateThought = useCallback(
     async (
-      parentId: number,
+      parentId: Id<"thoughts">,
       direction: "top" | "right" | "bottom" | "left"
     ) => {
       if (!canGenerateThought()) {
@@ -124,7 +165,9 @@ const App: React.FC = () => {
         return;
       }
 
-      const parentThought = thoughts.find((t) => t.id === parentId);
+      if (!canvasId || !user) return;
+
+      const parentThought = thoughts.find((t) => t._id === parentId);
       if (!parentThought) return;
 
       setIsLoading(true);
@@ -153,22 +196,31 @@ const App: React.FC = () => {
             break;
         }
 
-        const newThought: Thought = {
-          id: Date.now(),
+        const newThought = await createThought({
+          clerkId: user.id,
+          canvasId: canvasId as Id<"canvases">,
           content: generatedContent,
           x,
           y,
           connections: [parentId],
-        };
+        });
+
+        await updateThought({
+          thoughtId: parentId,
+          connections: [...parentThought.connections, newThought._id],
+        });
 
         setThoughts((prevThoughts) =>
           prevThoughts
             .map((t) =>
-              t.id === parentId
-                ? { ...t, connections: [...t.connections, newThought.id] }
+              t._id === parentId
+                ? { ...t, connections: [...t.connections, newThought._id] }
                 : t
             )
-            .concat(newThought)
+            .concat({
+              ...newThought,
+              connections: [parentId],
+            })
         );
 
         zoomToThought(newThought.x, newThought.y);
@@ -179,20 +231,33 @@ const App: React.FC = () => {
         setIsLoading(false);
       }
     },
-    [canGenerateThought, consumeTokens, thoughts, zoomToThought]
+    [
+      canvasId,
+      user,
+      thoughts,
+      createThought,
+      updateThought,
+      zoomToThought,
+      canGenerateThought,
+      consumeTokens,
+    ]
   );
 
-  const handleDrag = useCallback((id: number, x: number, y: number) => {
-    setThoughts((prevThoughts) =>
-      prevThoughts.map((thought) =>
-        thought.id === id ? { ...thought, x, y } : thought
-      )
-    );
-  }, []);
+  const handleDrag = useCallback(
+    (id: Id<"thoughts">, x: number, y: number) => {
+      updateThought({ thoughtId: id, x, y });
+      setThoughts((prevThoughts) =>
+        prevThoughts.map((thought) =>
+          thought._id === id ? { ...thought, x, y } : thought
+        )
+      );
+    },
+    [updateThought]
+  );
 
   const handleRewrite = useCallback(
-    async (id: number) => {
-      const thoughtToRewrite = thoughts.find((t) => t.id === id);
+    async (id: string) => {
+      const thoughtToRewrite = thoughts.find((t) => t._id === id);
       if (!thoughtToRewrite) return;
 
       if (!canGenerateThought()) {
@@ -215,7 +280,7 @@ const App: React.FC = () => {
 
         setThoughts((prevThoughts) =>
           prevThoughts.map((t) =>
-            t.id === id ? { ...t, content: rewrittenContent } : t
+            t._id === id ? { ...t, content: rewrittenContent } : t
           )
         );
       } catch (error) {
@@ -275,6 +340,10 @@ const App: React.FC = () => {
           updateOnboardingStep({ clerkId: user.id, step, value })
             .then(() => {
               toast.success(`${step} updated successfully!`);
+              if (step === "aiInteraction") {
+                // Redirect to the initial canvas after onboarding
+                navigate(`/canvas/${convexUser.initialCanvasId}`);
+              }
             })
             .catch((error) => {
               toast.error(`Error updating ${step}`);
@@ -284,6 +353,8 @@ const App: React.FC = () => {
       />
     );
   }
+
+  if (!canvas) return <LoadingSpinner />;
 
   return (
     <div className="h-screen flex flex-col bg-primary_bg text-brand_gray">
@@ -344,18 +415,11 @@ const App: React.FC = () => {
                     thoughts={thoughts}
                     width={CANVAS_WIDTH}
                     height={CANVAS_HEIGHT}
-                  >
-                    {thoughts.map((thought) => (
-                      <ThoughtBubble
-                        key={thought.id}
-                        thought={thought}
-                        onGenerateThought={handleGenerateThought}
-                        onDrag={handleDrag}
-                        onRewrite={handleRewrite}
-                        isLoading={isLoading}
-                      />
-                    ))}
-                  </Canvas>
+                    onGenerateThought={handleGenerateThought}
+                    onDrag={handleDrag}
+                    onRewrite={handleRewrite}
+                    isLoading={isLoading}
+                  />
                 </div>
               </TransformComponent>
             </TransformWrapper>
